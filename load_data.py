@@ -173,4 +173,7 @@ class CustomDataset(tf.keras.utils.Sequence):
         return label
     
     
-
+'''
+Note:
+1. The code for get input and get output are quite similar as they were stacked together in the original code.
+'''
