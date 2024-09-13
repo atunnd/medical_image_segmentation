@@ -32,7 +32,7 @@ class CustomDataset(tf.keras.utils.Sequence):
         self.load_train = load_train
         self.batch_size = batch_size
         self.n_train_patients = n_train_patients
-        self.n_test_patience = n_test_patients
+        self.n_test_patients = n_test_patients
         self.task = task
 
         # create folder for data training
@@ -101,10 +101,12 @@ class CustomDataset(tf.keras.utils.Sequence):
             number_of_patient = self.n_test_patients
 
         for patient in number_of_patient:
+
             if self.load_train:
                 raw_mri_sample = load_nrrd(os.path.join("../dataset/LA_dataset/Training Set", self.train_files[patient], 'lgemri.nrrd'))
             else:
                 raw_mri_sample = load_nrrd(os.path.join("../dataset/LA_dataset/Testing Set", self.test_files[patient], 'lgemri.nrrd'))
+            
             # move the dimension of slice into the last axis
             raw_mri_sample = np.rollaxis(raw_mri_sample, 0, 3) # (width, height, slice)
         
@@ -143,15 +145,13 @@ class CustomDataset(tf.keras.utils.Sequence):
             number_of_patient = self.n_test_patients
 
         for patient in number_of_patient:
+
             if self.load_train:
-                cavity_mri_sample = load_nrrd(os.path.join("../dataset/LA_dataset/Training Set", self.train_files[patient], 'lgemri.nrrd'))
+                cavity_mri_sample = load_nrrd(os.path.join("../dataset/LA_dataset/Training Set", self.train_files[patient], 'lgemri.nrrd')) // 255
             else:
                 cavity_mri_sample = load_nrrd(os.path.join("../dataset/LA_dataset/Testing Set", self.test_files[patient], 'laendo.nrrd')) // 255
-            # move the dimension of slice into the last axis
+
             cavity_mri_sample = np.rollaxis(cavity_mri_sample, 0, 3) # (width, height, slice)
-        
-            # based off the image size, and the specified input size, find coordinates to crop image
-	        # the input size of the model is 112
             midpoint = cavity_mri_sample.shape[0]//2
             n11, n12 = midpoint - int(self.input_size/2), midpoint + int(self.input_size/2)
 
