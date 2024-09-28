@@ -38,16 +38,6 @@ class CustomDataset(tf.keras.utils.Sequence):
 
         # create folder for data training
         if task == "La Cavity":
-            dir1 = "LA_subset"
-            dir2 = "La_subset/log"
-
-            if os.path.exists(dir1):
-                shutil.rmtree(dir1)
-            if os.path.exists(dir2):
-                shutil.rmtree(dir2)
-            os.makedirs('LA_subset')
-            os.makedirs('LA_subset/log')
-
             self.training_files= os.listdir(os.path.join(self.data_path, "Training Set"))[:self.n_train_patients]
             self.testing_files= os.listdir(os.path.join(self.data_path, "Testing Set"))[:self.n_test_patients]
             self.input_format = 'lgemri.nrrd'
@@ -102,8 +92,6 @@ class CustomDataset(tf.keras.utils.Sequence):
                 proccessed_out = self.transform[0](proccessed_out)
             elif self.mode == "val":
                 proccessed_out = self.transform[1](proccessed_out)
-            # elif self.mode == "test":
-            #     proccessed_out = self.transform[2](proccessed_out)
             else:
                 proccessed_out = self.transform(proccessed_out)
         return proccessed_out
