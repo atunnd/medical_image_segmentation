@@ -11,4 +11,4 @@
 
 
 ### Unet 3D
-![alt text](image.png)
+![alt text](images/unet3d_architecture.png)
