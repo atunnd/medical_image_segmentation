@@ -8,3 +8,7 @@
 | MRI Raw                           | LA Cavity Segmentation             | True LA Cavity                       |
 |-----------------------------------|------------------------------------|-------------------------------------|
 | ![MRI Raw](images/image.png)      | ![LA Cavity Segmentation](images/image-1.png) | ![True LA Cavity](images/image-2.png) |
+
+
+### Unet 3D
+![alt text](images/unet3d_architecture.png)
