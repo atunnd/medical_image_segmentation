@@ -7,14 +7,16 @@ import torch
 import copy
 from torch.utils.data import Dataset, DataLoader
 import torch
+import torch.nn.functional as F
+from skimage.transform import resize
 from config import (DATASET_PATH, TRAIN_BATCH_SIZE, VAL_BATCH_SIZE)
 
 class CustomDataset(tf.keras.utils.Sequence):
 
 
     def __init__(self, 
-                 n_train_patients=50, 
-                 n_test_patients=10, 
+                 n_train_patients=90, 
+                 n_test_patients=50, 
                  task = 'La Cavity', 
                  transforms = None):
         '''
@@ -38,6 +40,16 @@ class CustomDataset(tf.keras.utils.Sequence):
 
         # create folder for data training
         if task == "La Cavity":
+            dir1 = "LA_subset"
+            dir2 = "La_subset/log"
+
+            if os.path.exists(dir1):
+                shutil.rmtree(dir1)
+            if os.path.exists(dir2):
+                shutil.rmtree(dir2)
+            os.makedirs('LA_subset')
+            os.makedirs('LA_subset/log')
+
             self.training_files= os.listdir(os.path.join(self.data_path, "Training Set"))[:self.n_train_patients]
             self.testing_files= os.listdir(os.path.join(self.data_path, "Testing Set"))[:self.n_test_patients]
             self.input_format = 'lgemri.nrrd'
@@ -81,9 +93,22 @@ class CustomDataset(tf.keras.utils.Sequence):
         img_array = img_array.reshape(1, np.shape(img_array)[0], np.shape(img_array)[1], np.shape(img_array)[2])
         
         temp = np.empty(shape=[2, np.shape(label_array)[0], np.shape(label_array)[1], np.shape(label_array)[2]])
-        temp[0, :, :, :] = 1 - label_array
+        temp[0, :, :, :] = 255 - label_array
         temp[1, :, :, :] = label_array
         label_array = np.reshape(temp, newshape=[-1, np.shape(label_array)[0], np.shape(label_array)[1], np.shape(label_array)[2]])
+
+        if img_array.shape[2] == 576:
+            padding = (32, 32, 32, 32)
+            img_array = F.pad(torch.from_numpy(img_array), padding)
+            label_array = F.pad(torch.from_numpy(label_array), padding)
+            img_array = img_array.numpy()
+            label_array = label_array.numpy()
+
+        img_array = img_array[:, 19:79, :, :]
+        label_array = label_array[:, 19:79, :, :]
+
+        img_array= resize(img_array, (np.shape(img_array)[0], np.shape(img_array)[1], 160, 160), anti_aliasing=True)
+        label_array= resize(label_array, (np.shape(label_array)[0], np.shape(label_array)[1], 160, 160), anti_aliasing=True)
         
         proccessed_out = {'name': name,
                           'image': img_array, 'label': label_array}
@@ -104,8 +129,8 @@ def get_train_val_test_Dataloaders(train_transforms, val_transforms):
     Note: all the configs to generate dataloaders in included in "config.py"
     """
 
-    dataset = CustomDataset(n_train_patients=1,
-                            n_test_patients=1,
+    dataset = CustomDataset(n_train_patients=80,
+                            n_test_patients=20,
                             task = 'La Cavity',
                             transforms=[train_transforms, val_transforms])
 
@@ -121,7 +146,7 @@ def get_train_val_test_Dataloaders(train_transforms, val_transforms):
     val_dataloader = DataLoader(
         dataset=val_set, batch_size=VAL_BATCH_SIZE, shuffle=False)
     
-    return train_dataloader, val_dataloader
+    return train_dataloader, val_dataloader, 
     
         
 
