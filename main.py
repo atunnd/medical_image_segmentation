@@ -12,10 +12,12 @@ from unet3d import UNet3D
 from transforms import (train_transform, train_transform_cuda,
                         val_transform, val_transform_cuda)
 import os
+import shutil
 
-
+if os.path.exists("runs"):
+    shutil.rmtree("runs")
 writer = SummaryWriter("runs")
-os.makedirs('/kaggle/working/checkpoints', exist_ok=True)
+os.makedirs('checkpoints/unet', exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = UNet3D(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES)
@@ -30,8 +32,6 @@ elif not torch.cuda.is_available() and TRAIN_CUDA:
     val_transforms = val_transform
     print('cuda not available! Training initialized on cpu ...')
 
-model.summary()
-
 
 train_dataloader, val_dataloader = get_train_val_test_Dataloaders(
      train_transforms=train_transforms, val_transforms=val_transforms)
@@ -43,7 +43,7 @@ min_valid_loss = math.inf
 stop_count = 0
 
 for epoch in range(TRAINING_EPOCH):
-
+    print(f"Epoch {epoch}")
     train_loss = 0.0
     model.train()
     for i, data in enumerate(train_dataloader):
@@ -60,31 +60,31 @@ for epoch in range(TRAINING_EPOCH):
 
     valid_loss = 0.0
     model.eval()
-    with torch.no_grad():
-        for i, data in enumerate(val_dataloader):
-            image, ground_truth = data['image'].to(device), data['label'].to(device)
-            target = model(image)
-            loss = criterion(target, ground_truth)
-            print(f"Validate batch {i} has loss {loss}")
-            valid_loss = loss.item()
+    for i, data in enumerate(val_dataloader):
+        image, ground_truth = data['image'].to(device), data['label'].to(device)
+        target = model(image)
+        loss = criterion(target, ground_truth)
+        print(f"Validate batch {i} has loss: {loss}")
+        valid_loss += loss.item()
 
     writer.add_scalar("Loss/Train", train_loss / len(train_dataloader), epoch)
     writer.add_scalar("Loss/Validation", valid_loss /
                       len(val_dataloader), epoch)
 
-    print(f'Epoch {epoch+1} \t\t Training Loss: {train_loss / len(train_dataloader)} \t\t Validation Loss: {valid_loss / len(val_dataloader)}')
+    print(f'General {epoch} \t\t Training Loss: {train_loss / len(train_dataloader)} \t\t Validation Loss: {valid_loss / len(val_dataloader)}')
 
     if min_valid_loss > valid_loss:
+        stop_count = 0
         print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
         min_valid_loss = valid_loss
         # Saving State Dict
         torch.save(model.state_dict(),
-                   f'/kaggle/working/checkpoints/epoch{epoch}_valLoss{min_valid_loss}.pth')
-    else:
+                   f'checkpoints/unet/epoch{epoch}_valLoss{min_valid_loss}.pth')
+    else:    
         stop_count += 1
-        if stop_count == 6:
-            print("Early stopping triggered")
-            break
+        if stop_count == 5:
+           print("Early stopping triggered")
+           break
     print("\n")
 writer.flush()
 writer.close()
