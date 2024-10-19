@@ -15,8 +15,8 @@ class CustomDataset(tf.keras.utils.Sequence):
 
 
     def __init__(self, 
-                 n_train_patients=90, 
-                 n_test_patients=50, 
+                 n_train_patients=50, 
+                 n_test_patients=20, 
                  task = 'La Cavity', 
                  transforms = None):
         '''
@@ -96,19 +96,32 @@ class CustomDataset(tf.keras.utils.Sequence):
         temp[0, :, :, :] = 255 - label_array
         temp[1, :, :, :] = label_array
         label_array = np.reshape(temp, newshape=[-1, np.shape(label_array)[0], np.shape(label_array)[1], np.shape(label_array)[2]])
-
+        #label_array = label_array.reshape(1, np.shape(label_array)[0], np.shape(label_array)[1], np.shape(label_array)[2])
+        
         if img_array.shape[2] == 576:
             padding = (32, 32, 32, 32)
             img_array = F.pad(torch.from_numpy(img_array), padding)
             label_array = F.pad(torch.from_numpy(label_array), padding)
             img_array = img_array.numpy()
             label_array = label_array.numpy()
+        
+        '''
+        new_size = 112
 
-        img_array = img_array[:, 19:79, :, :]
-        label_array = label_array[:, 19:79, :, :]
+        a = int((np.shape(img_array)[2]/2)-new_size)
+        b = int((np.shape(img_array)[2]/2)+new_size)
+        c = int((np.shape(img_array)[3]/2)-new_size)
+        d = int((np.shape(img_array)[3]/2)+new_size)
 
-        img_array= resize(img_array, (np.shape(img_array)[0], np.shape(img_array)[1], 160, 160), anti_aliasing=True)
-        label_array= resize(label_array, (np.shape(label_array)[0], np.shape(label_array)[1], 160, 160), anti_aliasing=True)
+        img_array = img_array[:, 19:79, a:b, c:d]
+        label_array = label_array[:, 19:79, a:b, c:d]
+        '''
+        img_array = img_array[:, 19:83, :, :]
+        label_array = label_array[:, 19:83, :, :]
+        from skimage.transform import resize
+
+        img_array= resize(img_array, (np.shape(img_array)[0], np.shape(img_array)[1], 128, 128), anti_aliasing=True)
+        label_array= resize(label_array, (np.shape(label_array)[0], np.shape(label_array)[1], 128, 128), anti_aliasing=True)
         
         proccessed_out = {'name': name,
                           'image': img_array, 'label': label_array}
@@ -117,6 +130,8 @@ class CustomDataset(tf.keras.utils.Sequence):
                 proccessed_out = self.transform[0](proccessed_out)
             elif self.mode == "val":
                 proccessed_out = self.transform[1](proccessed_out)
+            # elif self.mode == "test":
+            #     proccessed_out = self.transform[2](proccessed_out)
             else:
                 proccessed_out = self.transform(proccessed_out)
         return proccessed_out
@@ -142,11 +157,8 @@ def get_train_val_test_Dataloaders(train_transforms, val_transforms):
     val_set.set_mode('val')
 
     train_dataloader = DataLoader(
-        dataset=train_set, batch_size=TRAIN_BATCH_SIZE, shuffle=False)
+        dataset=train_set, batch_size=TRAIN_BATCH_SIZE, shuffle=False, num_workers=4)
     val_dataloader = DataLoader(
-        dataset=val_set, batch_size=VAL_BATCH_SIZE, shuffle=False)
+        dataset=val_set, batch_size=VAL_BATCH_SIZE, shuffle=False, num_workers=4)
     
-    return train_dataloader, val_dataloader, 
-    
-        
-
+    return train_dataloader, val_dataloader
