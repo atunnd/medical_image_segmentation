@@ -47,8 +47,6 @@ class CustomDataset(tf.keras.utils.Sequence):
                 shutil.rmtree(dir1)
             if os.path.exists(dir2):
                 shutil.rmtree(dir2)
-            os.makedirs('LA_subset')
-            os.makedirs('LA_subset/log')
 
             self.training_files= os.listdir(os.path.join(self.data_path, "Training Set"))[:self.n_train_patients]
             self.testing_files= os.listdir(os.path.join(self.data_path, "Testing Set"))[:self.n_test_patients]
@@ -96,7 +94,6 @@ class CustomDataset(tf.keras.utils.Sequence):
         temp[0, :, :, :] = 255 - label_array
         temp[1, :, :, :] = label_array
         label_array = np.reshape(temp, newshape=[-1, np.shape(label_array)[0], np.shape(label_array)[1], np.shape(label_array)[2]])
-        #label_array = label_array.reshape(1, np.shape(label_array)[0], np.shape(label_array)[1], np.shape(label_array)[2])
         
         if img_array.shape[2] == 576:
             padding = (32, 32, 32, 32)
@@ -105,20 +102,9 @@ class CustomDataset(tf.keras.utils.Sequence):
             img_array = img_array.numpy()
             label_array = label_array.numpy()
         
-        '''
-        new_size = 112
-
-        a = int((np.shape(img_array)[2]/2)-new_size)
-        b = int((np.shape(img_array)[2]/2)+new_size)
-        c = int((np.shape(img_array)[3]/2)-new_size)
-        d = int((np.shape(img_array)[3]/2)+new_size)
-
-        img_array = img_array[:, 19:79, a:b, c:d]
-        label_array = label_array[:, 19:79, a:b, c:d]
-        '''
         img_array = img_array[:, 19:83, :, :]
         label_array = label_array[:, 19:83, :, :]
-        from skimage.transform import resize
+
 
         img_array= resize(img_array, (np.shape(img_array)[0], np.shape(img_array)[1], 128, 128), anti_aliasing=True)
         label_array= resize(label_array, (np.shape(label_array)[0], np.shape(label_array)[1], 128, 128), anti_aliasing=True)
@@ -130,8 +116,6 @@ class CustomDataset(tf.keras.utils.Sequence):
                 proccessed_out = self.transform[0](proccessed_out)
             elif self.mode == "val":
                 proccessed_out = self.transform[1](proccessed_out)
-            # elif self.mode == "test":
-            #     proccessed_out = self.transform[2](proccessed_out)
             else:
                 proccessed_out = self.transform(proccessed_out)
         return proccessed_out

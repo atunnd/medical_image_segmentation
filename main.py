@@ -1,14 +1,13 @@
 import math
 import numpy as np
 import torch
-from config import (
-    TRAINING_EPOCH, NUM_CLASSES, IN_CHANNELS, BCE_WEIGHTS, TRAIN_CUDA
-)
+from config import (TRAINING_EPOCH, NUM_CLASSES, IN_CHANNELS, BCE_WEIGHTS, TRAIN_CUDA, MODEL)
 from torch.nn import CrossEntropyLoss
 from load_data import get_train_val_test_Dataloaders
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
-from unet3d import UNet3D
+from model.unet3d import UNet3D
+from model.vnet import VNet
 from transforms import (train_transform, train_transform_cuda,
                         val_transform, val_transform_cuda)
 import os
@@ -17,10 +16,16 @@ import shutil
 if os.path.exists("runs"):
     shutil.rmtree("runs")
 writer = SummaryWriter("runs")
-os.makedirs('checkpoints/unet', exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = UNet3D(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES)
+
+if MODEL == 'UNET':
+    model = UNet3D(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES)
+    os.makedirs('checkpoints/unet', exist_ok=True)
+else:
+    model = VNet()
+    os.makedirs('checkpoints/vnet', exist_ok=True)
+
 if torch.cuda.is_available() and TRAIN_CUDA:
     model = torch.nn.DataParallel(model, device_ids=[0])
     model = model.to(device)
@@ -78,8 +83,10 @@ for epoch in range(TRAINING_EPOCH):
         print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
         min_valid_loss = valid_loss
         # Saving State Dict
-        torch.save(model.state_dict(),
-                   f'checkpoints/unet/epoch{epoch}_valLoss{min_valid_loss}.pth')
+        if MODEL =='UNET':
+            torch.save(model.state_dict(), f'checkpoints/unet/epoch{epoch}_valLoss{min_valid_loss}.pth')
+        else:
+            torch.save(model.state_dict(), f'checkpoints/vnet/epoch{epoch}_valLoss{min_valid_loss}.pth')
     else:    
         stop_count += 1
         if stop_count == 5:
