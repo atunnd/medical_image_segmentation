@@ -95,7 +95,7 @@ class CustomDataset(tf.keras.utils.Sequence):
         return proccessed_out
 
 
-def get_train_val_test_Dataloaders(data_path, train_batch_size, val_batch_size):
+def get_train_val_test_Dataloaders(data_path, train_batch_size, val_batch_size, num_workers):
     dataset = CustomDataset(data_path,
                             n_train_patients=80,
                             n_test_patients=20,
@@ -108,8 +108,8 @@ def get_train_val_test_Dataloaders(data_path, train_batch_size, val_batch_size):
     val_set.set_mode('val')
 
     train_dataloader = DataLoader(
-        dataset=train_set, batch_size=train_batch_size, shuffle=False, num_workers=4)
+        dataset=train_set, batch_size=train_batch_size, shuffle=False, num_workers= num_workers)
     val_dataloader = DataLoader(
-        dataset=val_set, batch_size=val_batch_size, shuffle=False, num_workers=4)
+        dataset=val_set, batch_size=val_batch_size, shuffle=False, num_workers= num_workers)
     
     return train_dataloader, val_dataloader
