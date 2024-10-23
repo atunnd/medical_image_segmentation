@@ -13,9 +13,6 @@ def ELUCons(elu, nchan):
     else:
         return nn.PReLU(nchan)
 
-# normalization between sub-volumes is necessary
-# for good performance
-
 
 class ContBatchNorm3d(nn.modules.batchnorm._BatchNorm):
     def _check_input_dim(self, input):
@@ -128,9 +125,9 @@ class OutputTransition(nn.Module):
         out = self.conv2(out)
 
         # make channels the last axis
-        # out = out.permute(0, 2, 3, 4, 1).contiguous()
+        out = out.permute(0, 2, 3, 4, 1).contiguous()
         # flatten
-        # out = out.view(out.numel() // 2, 2)
+        out = out.view(out.numel() // 2, 2)
         out = self.softmax(out)
         # treat channel 0 as the predicted output
         return out
