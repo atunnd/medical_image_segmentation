@@ -12,20 +12,6 @@ import time
 
 
 class Conv3DBlock(nn.Module):
-    """
-    The basic block for double 3x3x3 convolutions in the analysis path
-    -- __init__()
-    :param in_channels -> number of input channels
-    :param out_channels -> desired number of output channels
-    :param bottleneck -> specifies the bottlneck block
-    -- forward()
-    :param input -> input Tensor to be convolved
-    :return -> Tensor
-
-    Ex: in the first block, the in_channels is 3 and out_channels is 64, we have the first conv size (3, 32) and
-    the second conv size is (32, 64)
-    """
-
     def __init__(self, in_channels, out_channels, bottleneck = False) -> None:
         super(Conv3DBlock, self).__init__()
         self.conv1 = nn.Conv3d(in_channels= in_channels, out_channels=out_channels//2, kernel_size=(3,3,3), padding=1)
@@ -52,19 +38,6 @@ class Conv3DBlock(nn.Module):
 
 
 class UpConv3DBlock(nn.Module):
-    """
-    The basic block for upsampling followed by double 3x3x3 convolutions in the synthesis path
-    -- __init__()
-    :param in_channels -> number of input channels
-    :param out_channels -> number of residual connections' channels to be concatenated
-    :param last_layer -> specifies the last output layer
-    :param num_classes -> specifies the number of output channels for dispirate classes
-    -- forward()
-    :param input -> input Tensor
-    :param residual -> residual connection to be concatenated with input
-    :return -> Tensor
-    """
-
     def __init__(self, in_channels, res_channels=0, last_layer=False, num_classes=None) -> None:
         super(UpConv3DBlock, self).__init__()
         assert (last_layer==False and num_classes==None) or (last_layer==True and num_classes!=None), 'Invalid arguments'
@@ -76,6 +49,7 @@ class UpConv3DBlock(nn.Module):
         self.last_layer = last_layer
         if last_layer:
             self.conv3 = nn.Conv3d(in_channels=in_channels//2, out_channels=num_classes, kernel_size=(1,1,1))
+
             
         
     def forward(self, input, residual=None):
@@ -83,26 +57,17 @@ class UpConv3DBlock(nn.Module):
         if residual!=None: out = torch.cat((out, residual), 1)
         out = self.relu(self.bn(self.conv1(out)))
         out = self.relu(self.bn(self.conv2(out)))
-        if self.last_layer: out = self.conv3(out)
+        if self.last_layer: 
+            out = self.conv3(out)
+            # make channels the last axis
+            out = out.permute(0, 2, 3, 4, 1).contiguous()
+            # flatten
+            out = out.view(out.numel() // 2, 2)
+            out = self.softmax(out)
         return out
         
 
-
-
 class UNet3D(nn.Module):
-    """
-    The 3D UNet model
-    -- __init__()
-    :param in_channels -> number of input channels
-    :param num_classes -> specifies the number of output channels or masks for different classes
-    :param level_channels -> the number of channels at each level (count top-down)
-    :param bottleneck_channel -> the number of bottleneck channels 
-    :param device -> the device on which to run the model
-    -- forward()
-    :param input -> input Tensor
-    :return -> Tensor
-    """
-    
     def __init__(self, in_channels, num_classes, level_channels=[32, 64, 128], bottleneck_channel=256) -> None:
         super(UNet3D, self).__init__()
         level_1_chnls, level_2_chnls, level_3_chnls = level_channels[0], level_channels[1], level_channels[2]
