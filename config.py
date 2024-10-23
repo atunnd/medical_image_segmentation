@@ -3,11 +3,13 @@ Dataset configurations:
     :param DATASET_PATH -> the directory path to dataset .tar files
     :param IN_CHANNELS -> number of input channels
     :param NUM_CLASSES -> specifies the number of output channels for dispirate classes
+    :param MODEL -> choose for model [UNET, VNET]
 
 """""
 DATASET_PATH = ''
 IN_CHANNELS = 1
 NUM_CLASSES = 2
+MODEL = 'UNET'
 
 
 """""

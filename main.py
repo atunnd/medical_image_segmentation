@@ -1,79 +1,124 @@
+import argparse
+import torch
+from model.unet3d import UNet3D
+from model.vnet import VNet
 import math
 import numpy as np
 import torch
-from config import (
-    TRAINING_EPOCH, NUM_CLASSES, IN_CHANNELS, BCE_WEIGHTS, TRAIN_CUDA
-)
 from torch.nn import CrossEntropyLoss
 from load_data import get_train_val_test_Dataloaders
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
-from unet3d import UNet3D
-from transforms import (train_transform, train_transform_cuda,
-                        val_transform, val_transform_cuda)
+from model.unet3d import UNet3D
+from model.vnet import VNet
+from transforms import (train_transform, val_transform)
+import os
+import shutil
 
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceLoss, self).__init__()
 
-writer = SummaryWriter("runs")
+    def forward(self, inputs, targets, smooth=1):
+        
+        intersection = (inputs * targets).sum()                            
+        dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
+        
+        return 1 - dice
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = UNet3D(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES)
-if torch.cuda.is_available() and TRAIN_CUDA:
-    model = torch.nn.DataParallel(model, device_ids=[0])
-    model = model.to(device)
-    train_transforms = train_transform_cuda
-    val_transforms = val_transform_cuda
-    print("Train on cuda")
-elif not torch.cuda.is_available() and TRAIN_CUDA:
-    train_transforms = train_transform
-    val_transforms = val_transform
-    print('cuda not available! Training initialized on cpu ...')
+def main():
+    parser = argparse.ArgumentParser(description="Train a model")
+    parser.add_argument('--model', type=str, default=['unet'], choices=['unet', 'vnet'], help='Model type to use')
+    parser.add_argument('--epoch', type=int, default=10, help='Number of epochs for training')
+    parser.add_argument('--training_batch_size', type=str, default=16, help="Training batch size")
+    parser.add_argument('--testing_batch_size', type=str, default=16, help="Testing batch size")
+    parser.add_argument('--train_cuda', type=bool, default=True, help="Training on cuda")
+    parser.add_argument('--loss', type=str, default='bce', choices=['bce', 'dice'], help='loss function')
+    parser.add_argument('--data_path', type=str, help='Path to directory for training and testing data')
+    parser.add_argument('--bce_training_weight', type=str, default=0.996, help='Setting training weight for bce')
+    parser.add_argument()
+    # Parse the arguments
+    args = parser.parse_args()
 
+    if args.train_cuda == True:
+        device = 'cuda'
+    else:
+        device='cpu'
 
+    if args.model == 'unet':
+        model = UNet3D()
+        model = model.to(device)
+    elif args.model == 'vnet':
+        model = VNet()
+        model = model.to(device)
+    else:
+        raise ValueError(f"Model {args.model} not supported")
+    
+    if os.path.exists("runs"):
+        shutil.rmtree("runs")
+    writer = SummaryWriter("runs")
+    os.makedirs(f'checkpoints/{args.model}', exist_ok=True)
 
-train_dataloader, val_dataloader = get_train_val_test_Dataloaders(
-     train_transforms=train_transforms, val_transforms=val_transforms)
+    train_dataloader, val_dataloader = get_train_val_test_Dataloaders(
+                                        args.data_path,
+                                        args.training_batch_size,
+                                        args.testing_batch_size)
+    optimizer = Adam(params=model.parameters())
+    if args.loss == 'bce':
+        bce_weights = [1 - args.bce_training_weight, args.bce_training_weight]
+        criterion = CrossEntropyLoss(weight=torch.Tensor(bce_weights).to(device))
+    elif args.loss == 'dice':
+        criterion = DiceLoss()
 
-criterion = CrossEntropyLoss(weight=torch.Tensor(BCE_WEIGHTS))
-optimizer = Adam(params=model.parameters())
+    min_valid_loss = math.inf
+    stop_count = 0
 
-min_valid_loss = math.inf
+    print(f"Initialize training")
 
-for epoch in range(TRAINING_EPOCH):
+    for epoch in range(args.epoch):
+        print(f"Epoch {epoch}")
+        train_loss = 0.0
+        model.train()
+        for i, data in enumerate(train_dataloader):
+            image, ground_truth = data['image'].to(device), data['label'].to(device)
+            optimizer.zero_grad()
+            target = model(image)
+            loss = criterion(target, ground_truth)
+            loss.backward()
+            optimizer.step()
+            
+            print(f"Training batch {i} has loss: {loss}")
 
-    train_loss = 0.0
-    model.train()
-    for data in train_dataloader:
-        image, ground_truth = data['image'].to(device), data['label'].to(device)
-        optimizer.zero_grad()
-        target = model(image)
-        #print(np.shape(image), np.shape(ground_truth), np.shape(target))
-        loss = criterion(target, ground_truth)
-        loss.backward()
-        optimizer.step()
+            train_loss += loss.item()
 
-        train_loss += loss.item()
+        valid_loss = 0.0
+        model.eval()
+        for i, data in enumerate(val_dataloader):
+            image, ground_truth = data['image'].to(device), data['label'].to(device)
+            target = model(image)
+            loss = criterion(target, ground_truth)
+            print(f"Validate batch {i} has loss: {loss}")
+            valid_loss += loss.item()
 
-    valid_loss = 0.0
-    model.eval()
-    for data in val_dataloader:
-        image, ground_truth = data['image'].to(device), data['label'].to(device)
-        target = model(image)
-        loss = criterion(target, ground_truth)
+        writer.add_scalar("Loss/Train", train_loss / len(train_dataloader), epoch)
+        writer.add_scalar("Loss/Validation", valid_loss /
+                        len(val_dataloader), epoch)
+
+        print(f'=> General {epoch} \t\t Training Loss: {train_loss / len(train_dataloader)} \t\t Validation Loss: {valid_loss / len(val_dataloader)}')
+
+        if min_valid_loss > valid_loss:
+            stop_count = 0
+            print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
+            min_valid_loss = valid_loss
+            torch.save(model.state_dict(), f'checkpoints/{args.model}/epoch{epoch}_valLoss{min_valid_loss}.pth')
+        else:    
+            stop_count += 1
+            if stop_count == 5:
+                print("Early stopping triggered")
+                break
         print("\n")
-        valid_loss = loss.item()
+    writer.flush()
+    writer.close()
 
-    writer.add_scalar("Loss/Train", train_loss / len(train_dataloader), epoch)
-    writer.add_scalar("Loss/Validation", valid_loss /
-                      len(val_dataloader), epoch)
-
-    print(f'Epoch {epoch+1} \t\t Training Loss: {train_loss / len(train_dataloader)} \t\t Validation Loss: {valid_loss / len(val_dataloader)}')
-
-    if min_valid_loss > valid_loss:
-        print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
-        min_valid_loss = valid_loss
-        # Saving State Dict
-        torch.save(model.state_dict(),
-                   f'/kaggle/working/checkpoints/epoch{epoch}_valLoss{min_valid_loss}.pth')
-
-writer.flush()
-writer.close()
+if __name__ == "__main__":
+    main()
