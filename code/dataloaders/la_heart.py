@@ -14,10 +14,10 @@ class LAHeart(Dataset):
         self.transform = transform
         self.sample_list = []
         if split=='train':
-            with open(self._base_dir+'/../train.list', 'r') as f:
+            with open(self._base_dir+'../train.list', 'r') as f:
                 self.image_list = f.readlines()
         elif split == 'test':
-            with open(self._base_dir+'/../test.list', 'r') as f:
+            with open(self._base_dir+'../test.list', 'r') as f:
                 self.image_list = f.readlines()
         self.image_list = [item.replace('\n','') for item in self.image_list]
         if num is not None:
