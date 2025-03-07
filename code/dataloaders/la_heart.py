@@ -6,10 +6,15 @@ from torch.utils.data import Dataset
 import h5py
 import itertools
 from torch.utils.data.sampler import Sampler
+from monai.transforms import RandAffined, RandFlipd, RandGaussianNoised, Compose
+from torchvision import transforms
+from torchvision.transforms import RandAugment
+
+patch_size = (112, 112, 80)
 
 class LAHeart(Dataset):
     """ LA Dataset """
-    def __init__(self, base_dir=None, split='train', num=None, transform=None):
+    def __init__(self, base_dir=None, split='train', num=None, unlabeled_num=None, transform=None):
         self._base_dir = base_dir
         self.transform = transform
         self.sample_list = []
@@ -22,6 +27,8 @@ class LAHeart(Dataset):
         self.image_list = [item.replace('\n','') for item in self.image_list]
         if num is not None:
             self.image_list = self.image_list[:num]
+        if unlabeled_num is not None:
+            self.image_list = self.image_list[-unlabeled_num:]
         print("total {} samples".format(len(self.image_list)))
 
     def __len__(self):
@@ -134,6 +141,8 @@ class RandomNoise(object):
         return {'image': image, 'label': label}
 
 
+
+
 class CreateOnehotLabel(object):
     def __init__(self, num_classes):
         self.num_classes = num_classes
@@ -144,6 +153,28 @@ class CreateOnehotLabel(object):
         for i in range(self.num_classes):
             onehot_label[i, :, :, :] = (label == i).astype(np.float32)
         return {'image': image, 'label': label,'onehot_label':onehot_label}
+    
+
+    
+class TransformMPL:
+    def __init__(self):
+        self.weak_aug = transforms.Compose([
+            RandomRotFlip(),
+            RandomCrop(patch_size),
+            ToTensor()
+        ])
+
+        self.strong_aug = Compose([
+            RandAugment(num_ops=15, 
+                        magnitude = 10,
+                        num_magnitude_bins=10),
+            ToTensor()
+        ])
+    def __call__(self, sample):
+        weak_aug_sample = self.weak_aug(sample)
+        strong_aug_sample = self.strong_aug(sample)
+
+        return weak_aug_sample, strong_aug_sample
 
 
 class ToTensor(object):
@@ -204,3 +235,4 @@ def grouper(iterable, n):
     # grouper('ABCDEFG', 3) --> ABC DEF"
     args = [iter(iterable)] * n
     return zip(*args)
+

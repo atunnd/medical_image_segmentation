@@ -10,6 +10,8 @@ import pickle
 import numpy as np
 import torch
 from torch.utils.data.sampler import Sampler
+import shutil
+from collections import OrderedDict
 
 import networks
 
@@ -117,3 +119,50 @@ class Logger():
         self.data.append(train_point)
         with open(os.path.join(self.path), 'wb') as fp:
             pickle.dump(self.data, fp, -1)
+
+def save_checkpoint(args, state, is_best, finetune=False):
+    os.makedirs(args.save_path, exist_ok=True)
+    if finetune:
+        name = f'{args.name}_finetune'
+    else:
+        name = args.name
+    filename = f'{args.save_path}/{name}_last.pth.tar'
+    torch.save(state, filename, _use_new_zipfile_serialization=False)
+    if is_best:
+        shutil.copyfile(filename, f'{args.save_path}/{args.name}_best.pth.tar')
+
+def accuracy(output, target, topk=(1,)):
+    output = output.to(torch.device('cpu'))
+    target = target.to(torch.device('cpu'))
+    maxk = max(topk)
+    batch_size = target.shape[0]
+
+    _, idx = output.sort(dim=1, descending=True)
+    pred = idx.narrow(1, 0, maxk).t()
+    correct = pred.eq(target.reshape(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].reshape(-1).float().sum(dim=0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
+def module_load_state_dict(model, state_dict):
+    try:
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]  # remove `module.`
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict)
+    except:
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = f'module.{k}'  # add `module.`
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict)
+
+def model_load_state_dict(model, state_dict):
+    try:
+        model.load_state_dict(state_dict)
+    except:
+        module_load_state_dict(model, state_dict)
