@@ -120,7 +120,8 @@ class Logger():
         with open(os.path.join(self.path), 'wb') as fp:
             pickle.dump(self.data, fp, -1)
 
-def save_checkpoint(args, state, is_best, finetune=False):
+def save_checkpoint(args, state,finetune=False):
+    
     os.makedirs(args.save_path, exist_ok=True)
     if finetune:
         name = f'{args.name}_finetune'
@@ -128,8 +129,7 @@ def save_checkpoint(args, state, is_best, finetune=False):
         name = args.name
     filename = f'{args.save_path}/{name}_last.pth.tar'
     torch.save(state, filename, _use_new_zipfile_serialization=False)
-    if is_best:
-        shutil.copyfile(filename, f'{args.save_path}/{args.name}_best.pth.tar')
+
 
 def accuracy(output, target, topk=(1,)):
     output = output.to(torch.device('cpu'))
