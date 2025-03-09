@@ -8,12 +8,13 @@ import itertools
 from torch.utils.data.sampler import Sampler
 from torchvision import transforms
 from torchvision.transforms import RandAugment
+from torchvision.transforms import Compose
 
 patch_size = (112, 112, 80)
 
 class LAHeart(Dataset):
     """ LA Dataset """
-    def __init__(self, base_dir=None, split='train', num=None, unlabeled_num=None, transform=None):
+    def __init__(self, base_dir=None, split='train', num=None, unlabeled_num=None, mpl_mode=False, transform=None):
         self._base_dir = base_dir
         self.transform = transform
         self.sample_list = []
@@ -29,6 +30,7 @@ class LAHeart(Dataset):
         if unlabeled_num is not None:
             self.image_list = self.image_list[-unlabeled_num:]
         print("total {} samples".format(len(self.image_list)))
+        self.mpl_mode = mpl_mode
 
     def __len__(self):
         return len(self.image_list)
@@ -36,9 +38,14 @@ class LAHeart(Dataset):
     def __getitem__(self, idx):
         image_name = self.image_list[idx]
         h5f = h5py.File(self._base_dir+"/"+image_name+"/mri_norm2.h5", 'r')
-        image = h5f['image'][:]
-        label = h5f['label'][:]
-        sample = {'image': image, 'label': label}
+        if self.mpl_mode == True:
+            image = h5f['image'][:]
+            sample = {'weak_aug': image, 'strong_aug': image}
+        else:
+            image = h5f['image'][:]
+            label = h5f['label'][:]
+            sample = {'image': image, 'label': label}
+
         if self.transform:
             sample = self.transform(sample)
 
@@ -106,6 +113,41 @@ class RandomCrop(object):
         label = label[w1:w1 + self.output_size[0], h1:h1 + self.output_size[1], d1:d1 + self.output_size[2]]
         image = image[w1:w1 + self.output_size[0], h1:h1 + self.output_size[1], d1:d1 + self.output_size[2]]
         return {'image': image, 'label': label}
+    
+class RandomCrop_MPL(object):
+    """
+    Crop randomly the image in a sample
+    Args:
+    output_size (int): Desired output size
+    """
+
+    def __init__(self, output_size):
+        self.output_size = output_size
+
+    def __call__(self, sample):
+        image1, image2 = sample['weak_aug'], sample['strong_aug']
+
+        # pad the sample if necessary
+        if image1.shape[0] <= self.output_size[0] or image1.shape[1] <= self.output_size[1] or image1.shape[2] <= \
+                self.output_size[2]:
+            pw = max((self.output_size[0] - image1.shape[0]) // 2 + 3, 0)
+            ph = max((self.output_size[1] - image1.shape[1]) // 2 + 3, 0)
+            pd = max((self.output_size[2] - image1.shape[2]) // 2 + 3, 0)
+            image1 = np.pad(image1, [(pw, pw), (ph, ph), (pd, pd)], mode='constant', constant_values=0)
+            image2 = np.pad(image2, [(pw, pw), (ph, ph), (pd, pd)], mode='constant', constant_values=0)
+
+        (w, h, d) = image1.shape
+        # if np.random.uniform() > 0.33:
+        #     w1 = np.random.randint((w - self.output_size[0])//4, 3*(w - self.output_size[0])//4)
+        #     h1 = np.random.randint((h - self.output_size[1])//4, 3*(h - self.output_size[1])//4)
+        # else:
+        w1 = np.random.randint(0, w - self.output_size[0])
+        h1 = np.random.randint(0, h - self.output_size[1])
+        d1 = np.random.randint(0, d - self.output_size[2])
+
+        image1 = image1[w1:w1 + self.output_size[0], h1:h1 + self.output_size[1], d1:d1 + self.output_size[2]]
+        image2 = image2[w1:w1 + self.output_size[0], h1:h1 + self.output_size[1], d1:d1 + self.output_size[2]]
+        return {'weak_aug': image1, 'strong_aug': image2}
 
 
 class RandomRotFlip(object):
@@ -125,7 +167,24 @@ class RandomRotFlip(object):
         label = np.flip(label, axis=axis).copy()
 
         return {'image': image, 'label': label}
+    
+class RandomRotFlip_MPL(object):
+    """
+    Crop randomly flip the dataset in a sample
+    Args:
+    output_size (int): Desired output size
+    """
 
+    def __call__(self, sample):
+        image1, image2 = sample['weak_aug'], sample['strong_aug']
+        k = np.random.randint(0, 4)
+        image1 = np.rot90(image1, k)
+        image2 = np.rot90(image2, k)
+        axis = np.random.randint(0, 2)
+        image1 = np.flip(image1, axis=axis).copy()
+        image2 = np.flip(image2, axis=axis).copy()
+
+        return {'weak_aug': image1, 'strong_aug': image2}
 
 class RandomNoise(object):
     def __init__(self, mu=0, sigma=0.1):
@@ -133,11 +192,26 @@ class RandomNoise(object):
         self.sigma = sigma
 
     def __call__(self, sample):
-        image, label = sample['image'], sample['label']
+        image = sample
         noise = np.clip(self.sigma * np.random.randn(image.shape[0], image.shape[1], image.shape[2]), -2*self.sigma, 2*self.sigma)
         noise = noise + self.mu
         image = image + noise
-        return {'image': image, 'label': label}
+
+        return image
+
+class RandomNoise_MPL(object):
+    def __init__(self, mu=0, sigma=0.1):
+        self.mu = mu
+        self.sigma = sigma
+
+    def __call__(self, sample):
+        image1, image2 = sample['weak_aug'], sample['strong_aug']
+        noise = np.clip(self.sigma * np.random.randn(image1.shape[0], image1.shape[1], image1.shape[2]), -2*self.sigma, 2*self.sigma)
+        noise = noise + self.mu
+  
+        image2 = image2 + noise
+
+        return {'weak_aug': image1, 'strong_aug': image2}
 
 
 
@@ -154,26 +228,6 @@ class CreateOnehotLabel(object):
         return {'image': image, 'label': label,'onehot_label':onehot_label}
     
 
-    
-class TransformMPL:
-    def __init__(self):
-        self.weak_aug = transforms.Compose([
-            RandomRotFlip(),
-            RandomCrop(patch_size),
-            ToTensor()
-        ])
-
-        self.strong_aug = Compose([
-            RandAugment(num_ops=15, 
-                        magnitude = 10,
-                        num_magnitude_bins=10),
-            ToTensor()
-        ])
-    def __call__(self, sample):
-        weak_aug_sample = self.weak_aug(sample)
-        strong_aug_sample = self.strong_aug(sample)
-
-        return weak_aug_sample, strong_aug_sample
 
 
 class ToTensor(object):
@@ -187,6 +241,17 @@ class ToTensor(object):
                     'onehot_label': torch.from_numpy(sample['onehot_label']).long()}
         else:
             return {'image': torch.from_numpy(image), 'label': torch.from_numpy(sample['label']).long()}
+
+class ToTensor_MPL(object):
+    """Convert ndarrays in sample to Tensors."""
+
+    def __call__(self, sample):
+        image1, image2 = sample['weak_aug'], sample['strong_aug']
+        image1 = image1.reshape(1, image1.shape[0], image1.shape[1], image1.shape[2]).astype(np.float32)
+        image2 = image2.reshape(1, image2.shape[0], image2.shape[1], image2.shape[2]).astype(np.float32)
+
+        return {"weak_aug": image1, "strong_aug": image2}
+
 
 
 class TwoStreamBatchSampler(Sampler):
